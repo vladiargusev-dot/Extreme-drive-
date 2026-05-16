@@ -65,6 +65,11 @@ let doubleTimer, slowTimer, invTimer, spawnTimer, puTimer;
 let cameraRoll = 0;
 let keys = {}, anim = 0;
 
+// Boost (hold Space) + Jump (double-tap Space)
+let boostMeter = 100;
+let playerJumpH = 0, jumpVY = 0, isJumping = false;
+let lastSpaceTime = 0;
+
 // Pre-generate crowd
 const CROWD_CLR = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#ecf0f1'];
 const crowd = [];
@@ -82,6 +87,7 @@ function initGame() {
   obstacles = []; powerups = []; particles = [];
   doubleTimer = 0; slowTimer = 0; invTimer = 0; spawnTimer = 0; puTimer = 0;
   cameraRoll = 0;
+  boostMeter = 100; playerJumpH = 0; jumpVY = 0; isJumping = false; lastSpaceTime = 0;
 }
 
 // ─── PROJECTION ────────────────────────────────────────────────────────────
@@ -319,7 +325,45 @@ function drawPowerups3D() {
 
 function drawDashboard() {
   const by = canvas.height - DASH_H;
-  // Hood shape
+  const cx = canvas.width / 2;
+
+  // ── Windshield glass (overlay on 3D view) ──
+  const wGrad = ctx.createLinearGradient(0, HORIZON_Y + 10, 0, by);
+  wGrad.addColorStop(0, 'rgba(180,225,255,0.06)');
+  wGrad.addColorStop(1, 'rgba(180,225,255,0.22)');
+  ctx.fillStyle = wGrad;
+  ctx.beginPath();
+  ctx.moveTo(canvas.width * 0.11, by - 4);
+  ctx.lineTo(canvas.width * 0.16, HORIZON_Y + 12);
+  ctx.lineTo(canvas.width * 0.84, HORIZON_Y + 12);
+  ctx.lineTo(canvas.width * 0.89, by - 4);
+  ctx.closePath(); ctx.fill();
+
+  // Windshield glare streak
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.beginPath();
+  ctx.moveTo(canvas.width * 0.32, HORIZON_Y + 14);
+  ctx.lineTo(canvas.width * 0.42, HORIZON_Y + 14);
+  ctx.lineTo(canvas.width * 0.36, by - 4);
+  ctx.lineTo(canvas.width * 0.26, by - 4);
+  ctx.closePath(); ctx.fill();
+
+  // A-pillars (windshield frame)
+  ctx.fillStyle = player.color; ctx.strokeStyle = '#111'; ctx.lineWidth = 2;
+  ctx.beginPath(); // left
+  ctx.moveTo(canvas.width * 0.11, by - 4);
+  ctx.lineTo(canvas.width * 0.16, HORIZON_Y + 12);
+  ctx.lineTo(canvas.width * 0.20, HORIZON_Y + 12);
+  ctx.lineTo(canvas.width * 0.14, by - 4);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); // right
+  ctx.moveTo(canvas.width * 0.89, by - 4);
+  ctx.lineTo(canvas.width * 0.84, HORIZON_Y + 12);
+  ctx.lineTo(canvas.width * 0.80, HORIZON_Y + 12);
+  ctx.lineTo(canvas.width * 0.86, by - 4);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+
+  // ── Hood ──
   ctx.fillStyle = player.color; ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(0, canvas.height);
@@ -330,13 +374,11 @@ function drawDashboard() {
   ctx.lineTo(canvas.width, canvas.height);
   ctx.closePath(); ctx.fill(); ctx.stroke();
 
-  // Accent centre stripe
+  // Hood centre accent stripe
   ctx.fillStyle = player.accent;
   ctx.beginPath();
-  ctx.moveTo(canvas.width * 0.45, by + 18);
-  ctx.lineTo(canvas.width * 0.55, by + 18);
-  ctx.lineTo(canvas.width * 0.52, canvas.height);
-  ctx.lineTo(canvas.width * 0.48, canvas.height);
+  ctx.moveTo(cx - 30, by + 17); ctx.lineTo(cx + 30, by + 17);
+  ctx.lineTo(cx + 22, canvas.height); ctx.lineTo(cx - 22, canvas.height);
   ctx.closePath(); ctx.fill();
 
   // Trim line
@@ -347,12 +389,95 @@ function drawDashboard() {
 
   // Mirrors
   ctx.fillStyle = player.accent; ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.roundRect(canvas.width * 0.05, by - 3, 30, 15, 5); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.roundRect(canvas.width * 0.87, by - 3, 30, 15, 5); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(canvas.width * 0.05, by - 4, 32, 16, 5); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(canvas.width * 0.87, by - 4, 32, 16, 5); ctx.fill(); ctx.stroke();
 
-  // Windshield bottom frame
+  // Windshield bottom frame bar
   ctx.fillStyle = '#111';
-  ctx.fillRect(canvas.width * 0.08, by - 6, canvas.width * 0.84, 7);
+  ctx.fillRect(canvas.width * 0.11, by - 6, canvas.width * 0.78, 7);
+
+  // ── Steering wheel ──
+  const steerY = canvas.height - 18;
+  const steerR = 42;
+  const steerAngle = -cameraRoll * 10 + (keys['ArrowLeft']||keys['a']||keys['A'] ? -0.25 : keys['ArrowRight']||keys['d']||keys['D'] ? 0.25 : 0);
+
+  ctx.save();
+  ctx.translate(cx, steerY);
+  ctx.rotate(steerAngle);
+
+  // Column
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(-6, 0, 12, 30);
+
+  // Outer ring
+  ctx.strokeStyle = '#2a2a2a'; ctx.lineWidth = 10;
+  ctx.beginPath(); ctx.arc(0, 0, steerR, 0, Math.PI*2); ctx.stroke();
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.arc(0, 0, steerR, 0, Math.PI*2); ctx.stroke();
+
+  // Grip texture on ring
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 3;
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    const a2 = a + 0.22;
+    ctx.beginPath();
+    ctx.arc(0, 0, steerR, a, a2);
+    ctx.stroke();
+  }
+
+  // Spokes
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 6;
+  [270, 30, 150].forEach(deg => {
+    const a = deg * Math.PI / 180;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a)*steerR*0.92, Math.sin(a)*steerR*0.92); ctx.stroke();
+  });
+
+  // Center hub
+  ctx.fillStyle = player.color;
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  // Brand dot
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
+// ─── FINISH LINE ───────────────────────────────────────────────────────────
+
+function drawFinishLine() {
+  const lvl = LEVELS[currentLevel];
+  const finishRelZ = lvl.targetDist - playerZ;
+  if (finishRelZ < 0 || finishRelZ > SPAWN_DIST + 80) return;
+
+  const proj = project(0, finishRelZ);
+  if (!proj || proj.screenY < HORIZON_Y || proj.screenY > canvas.height - DASH_H) return;
+
+  const y = proj.screenY;
+  const hw = proj.roadHW;
+  const cx = proj.roadCX;
+  const sqW = hw * 2 / 12;
+  const sqH = Math.max(3, 18 * proj.scale);
+
+  // Checkered banner
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = i % 2 === 0 ? '#fff' : '#000';
+    ctx.fillRect(cx - hw + i * sqW, y - sqH, sqW + 0.5, sqH * 2);
+  }
+  // Border lines
+  ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = Math.max(1, 2 * proj.scale);
+  ctx.beginPath(); ctx.moveTo(cx - hw, y - sqH); ctx.lineTo(cx + hw, y - sqH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx - hw, y + sqH); ctx.lineTo(cx + hw, y + sqH); ctx.stroke();
+
+  // FINISH text when close
+  if (finishRelZ < 120) {
+    const fs = Math.max(12, 26 * proj.scale);
+    ctx.font = `bold ${fs}px Arial`;
+    ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+    ctx.strokeText('🏁 FINISH! 🏁', cx, y - sqH - fs * 0.7);
+    ctx.fillStyle = '#f1c40f'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🏁 FINISH! 🏁', cx, y - sqH - fs * 0.7);
+  }
 }
 
 // ─── PARTICLES ─────────────────────────────────────────────────────────────
@@ -419,6 +544,21 @@ function drawHUD() {
     ctx.fillText('STUCK IN MUD!', canvas.width/2, sy + 5);
   }
 
+  // Boost meter (bottom left of HUD area)
+  const boostY = canvas.height - DASH_H - 58;
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(8, boostY, 70, 14);
+  const boostCol = boostMeter > 50 ? '#2ecc71' : boostMeter > 20 ? '#f39c12' : '#e74c3c';
+  ctx.fillStyle = boostCol; ctx.fillRect(8, boostY, 70 * (boostMeter / 100), 14);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1; ctx.strokeRect(8, boostY, 70, 14);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('BOOST [SPACE]', 43, boostY + 7);
+
+  // Jump indicator
+  if (isJumping) {
+    ctx.fillStyle = '#2ecc71'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('↑ JUMP', 10, boostY - 18);
+  }
+
   // Speedometer (bottom right)
   const lvl2 = LEVELS[currentLevel];
   const spd = Math.round((doubleTimer>0?lvl2.baseSpeed*2:lvl2.baseSpeed)*(slowTimer>0?0.3:1)*60);
@@ -439,7 +579,20 @@ function update() {
   anim++;
   const lvl = LEVELS[currentLevel];
   let speed = doubleTimer > 0 ? lvl.baseSpeed * 2 : lvl.baseSpeed;
+
+  // Space boost (hold)
+  const boostHeld = keys[' '] && boostMeter > 0 && !isJumping;
+  if (boostHeld) { speed *= 2; boostMeter = Math.max(0, boostMeter - 1.5); }
+  else { boostMeter = Math.min(100, boostMeter + 0.5); }
+
   if (slowTimer > 0) speed *= 0.3;
+
+  // Jump physics
+  if (isJumping) {
+    playerJumpH += jumpVY;
+    jumpVY -= 0.9;
+    if (playerJumpH <= 0) { playerJumpH = 0; jumpVY = 0; isJumping = false; addParticles(canvas.width/2, canvas.height - DASH_H - 10, '#aaa', 8); }
+  }
 
   playerZ += speed;
   if (doubleTimer > 0) doubleTimer--;
@@ -494,6 +647,7 @@ function update() {
       if (o.hit) continue;
       const relZ = o.worldZ - playerZ;
       if (relZ < 18 && relZ > -6 && Math.abs(playerX - o.worldX) < o.worldW + 0.08) {
+        if (isJumping && playerJumpH > 20) { o.hit = true; continue; } // jump over
         o.hit = true;
         if (o.type === 'spike') {
           player.hp--; invTimer = 100;
@@ -675,6 +829,15 @@ document.addEventListener('keydown', e => {
     if (e.key==='r'||e.key==='R'||e.key==='Enter') retryLevel();
     if (e.key==='m'||e.key==='M') goMenu();
   }
+  // Space: double-tap = jump, hold = boost
+  if (e.key === ' ' && state === S.PLAYING) {
+    const now = Date.now();
+    if (now - lastSpaceTime < 320 && !isJumping) {
+      isJumping = true; jumpVY = 14; playerJumpH = 1;
+      addParticles(canvas.width/2, canvas.height - DASH_H - 20, '#fff', 10);
+    }
+    lastSpaceTime = now;
+  }
   if (['ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
 });
 document.addEventListener('keyup', e => { keys[e.key] = false; });
@@ -722,6 +885,7 @@ function loop() {
     ctx.translate(-canvas.width/2, -canvas.height/2);
     drawBackground3D();
     drawRoad3D();
+    drawFinishLine();
     drawObstacles3D();
     drawPowerups3D();
     ctx.restore();
