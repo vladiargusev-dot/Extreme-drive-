@@ -678,7 +678,6 @@ function drawHUD() {
   ctx.fillStyle=bg; ctx.fillRect(10,37,(canvas.width-20)*prog,11);
   ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.lineWidth=1; ctx.strokeRect(10,37,canvas.width-20,11);
   if(doubleTimer>0){ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(canvas.width/2-68,56,136,28);ctx.fillStyle='#f1c40f';ctx.font='bold 14px Arial';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText('⚡ 2X SPEED',canvas.width/2,59);ctx.fillStyle='#f39c12';ctx.fillRect(canvas.width/2-58,74,116*(doubleTimer/300),6);}
-  if(slowTimer>0){const sy=doubleTimer>0?88:56;ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(canvas.width/2-68,sy,136,24);ctx.fillStyle='#795548';ctx.font='bold 13px Arial';ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText('STUCK!',canvas.width/2,sy+5);}
   // Boost bar
   const boostY=canvas.height-DASH_H-60;
   ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(8,boostY,72,14);
@@ -797,10 +796,8 @@ function update() {
           addParticles(canvas.width/2,canvas.height-DASH_H-60,'#e74c3c',16);
           if (player.hp<=0) { state=S.GAMEOVER; wonGame=false; }
         } else if (o.type === 'water') {
-          slowTimer = 60; sfxHit();
           addParticles(canvas.width/2,canvas.height-DASH_H-60,'#29b6f6',18);
         } else {
-          slowTimer=160; sfxHit();
           addParticles(canvas.width/2,canvas.height-DASH_H-60,'#795548',12);
         }
       }
